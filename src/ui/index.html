@@ -9,19 +9,46 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- Header -->
+    <!-- Header with Top Match Controls -->
     <header class="header">
       <div class="logo">
         <span class="logo-icon">🤖⚔️</span>
         <h1>MCP ROBOT WARS</h1>
         <span class="badge">LIVE ARENA</span>
       </div>
+
+      <!-- Action Buttons in Header for Instant Visibility -->
+      <div class="header-controls">
+        <button id="start-btn" class="btn btn-primary pulse-btn">⚔️ START BATTLE</button>
+        <button id="step-btn" class="btn btn-secondary">⏯️ STEP TURN</button>
+        <button id="pause-btn" class="btn btn-secondary">⏸️ PAUSE</button>
+        <button id="reset-btn" class="btn btn-danger">🔄 RESET</button>
+      </div>
+
       <div class="match-info">
-        <div class="info-pill"><span class="label">ARENA:</span> <span id="arena-name">The Steel Colosseum</span></div>
         <div class="info-pill"><span class="label">TURN:</span> <span id="turn-count" class="highlight">0 / 30</span></div>
         <div class="info-pill"><span class="label">THE PIT:</span> <span id="pit-status" class="hazard-text">LOCKED</span></div>
       </div>
     </header>
+
+    <!-- Strategy Selector Bar -->
+    <div class="strategy-bar">
+      <div class="strategy-group">
+        <span class="strategy-label red-dot">🔴 Bot 1 Strategy:</span>
+        <select id="bot1-strategy" class="strategy-select">
+          <option value="aggressive">Aggressive (Spinner Rush)</option>
+          <option value="tactical">Tactical (Defensive Shield)</option>
+        </select>
+      </div>
+      <div class="arena-tag">🏟️ <span id="arena-name">The Steel Colosseum</span></div>
+      <div class="strategy-group">
+        <span class="strategy-label blue-dot">🔵 Bot 2 Strategy:</span>
+        <select id="bot2-strategy" class="strategy-select">
+          <option value="tactical" selected>Tactical (Defensive Shield)</option>
+          <option value="aggressive">Aggressive (Spinner Rush)</option>
+        </select>
+      </div>
+    </div>
 
     <!-- Main Battleground Grid -->
     <main class="main-layout">
@@ -60,36 +87,13 @@
       <!-- Center: The Canvas Arena -->
       <section class="arena-center">
         <div class="canvas-wrapper">
-          <canvas id="arena-canvas" width="600" height="600"></canvas>
+          <canvas id="arena-canvas" width="540" height="540"></canvas>
           <div id="match-overlay" class="match-overlay hidden">
             <div class="overlay-content">
               <h2 id="overlay-title">VICTORY</h2>
               <p id="overlay-msg">Hypno-Disc destroyed Chaos-2!</p>
-              <button id="overlay-restart-btn" class="btn btn-primary">FIGHT AGAIN</button>
+              <button id="overlay-restart-btn" class="btn btn-primary pulse-btn">⚔️ FIGHT AGAIN</button>
             </div>
-          </div>
-        </div>
-
-        <!-- Arena Controls -->
-        <div class="control-bar">
-          <button id="start-btn" class="btn btn-primary">⚔️ START BATTLE</button>
-          <button id="step-btn" class="btn btn-secondary">⏯️ STEP TURN</button>
-          <button id="pause-btn" class="btn btn-secondary">⏸️ PAUSE</button>
-          <button id="reset-btn" class="btn btn-danger">🔄 RESET</button>
-          
-          <div class="strategy-selectors">
-            <label>Bot 1:
-              <select id="bot1-strategy">
-                <option value="aggressive">Aggressive (Spinner)</option>
-                <option value="tactical">Tactical (Shield/Defense)</option>
-              </select>
-            </label>
-            <label>Bot 2:
-              <select id="bot2-strategy">
-                <option value="tactical" selected>Tactical (Shield/Defense)</option>
-                <option value="aggressive">Aggressive (Spinner)</option>
-              </select>
-            </label>
           </div>
         </div>
       </section>
