@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArenaConfig,
   ArenaState,
   BotAction,
@@ -12,6 +12,7 @@ import {
 import { createDefaultArena, getOffsetForDirection, getOppositeDirection, isWithinBounds, rotateDirection } from './arena.js';
 import { createBot } from './bot.js';
 import { calculateDamage, findBotAt, pushBot } from './combat.js';
+import { processHouseRobotAttacks } from './house-robots.js';
 
 export function initializeMatch(
   blueprints: [BotBlueprint, BotBlueprint],
@@ -43,6 +44,7 @@ export function initializeMatch(
     maxTurns: config.maxTurns,
     config,
     bots,
+    houseRobots: config.houseRobots ? [...config.houseRobots] : [],
     winnerId: null,
     isGameOver: false,
     endReason: null,
@@ -65,6 +67,9 @@ export function executeTurn(
     bot.activeShield = null;
     bot.energy = Math.min(bot.maxEnergy, bot.energy + 5);
     bot.score.turnsSurvived++;
+    if (bot.empDisruptedTurns > 0) {
+      bot.empDisruptedTurns--;
+    }
     for (const weapon of bot.weapons) {
       if (weapon.currentCooldown > 0) {
         weapon.currentCooldown--;
@@ -72,8 +77,9 @@ export function executeTurn(
     }
   }
 
-  // Check if The Pit just opened this turn
-  if (currentTurn === state.config.pitOpensAtTurn) {
+  // 1. Dynamic Map Events
+  // The Pit opening (Colosseum)
+  if (currentTurn === state.config.pitOpensAtTurn && state.config.pitPosition.x >= 0) {
     newEvents.push({
       turn: currentTurn,
       timestamp: Date.now(),
@@ -83,7 +89,65 @@ export function executeTurn(
     });
   }
 
-  // 1. Process Shield Actions first (defensive stance takes priority)
+  // Lava Chamber shrinking floor
+  if (state.config.mapType === 'lava_chamber' && state.config.specialRules?.lavaShrinkInterval) {
+    const ring = Math.floor(currentTurn / state.config.specialRules.lavaShrinkInterval);
+    if (currentTurn % state.config.specialRules.lavaShrinkInterval === 0 && ring > 0) {
+      // Add new lava hazard ring
+      const ringIndex = ring - 1;
+      const minX = ringIndex;
+      const maxX = state.config.width - 1 - ringIndex;
+      const minY = ringIndex;
+      const maxY = state.config.height - 1 - ringIndex;
+
+      let newLavaCount = 0;
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          if (x === minX || x === maxX || y === minY || y === maxY) {
+            if (!state.config.hazards.some(h => h.type === 'lava' && h.position.x === x && h.position.y === y)) {
+              state.config.hazards.push({
+                id: `lava-${x}-${y}`,
+                type: 'lava',
+                position: { x, y },
+                isActive: true,
+                damage: 9999, // Lava instant KO / incinerate
+                description: 'Molten Lava Tile',
+              });
+              newLavaCount++;
+            }
+          }
+        }
+      }
+
+      if (newLavaCount > 0) {
+        newEvents.push({
+          turn: currentTurn,
+          timestamp: Date.now(),
+          type: 'lava_collapse',
+          description: `🌋🔥 LAVA SURGE! Outer ring ${ring} collapsed into molten lava! The arena is shrinking!`,
+          details: { ring },
+        });
+      }
+    }
+  }
+
+  // EMP Cyberdome pulse
+  if (state.config.mapType === 'emp_cyberdome' && state.config.specialRules?.empPulseInterval) {
+    if (currentTurn > 1 && currentTurn % state.config.specialRules.empPulseInterval === 0) {
+      for (const bot of Object.values(state.bots)) {
+        bot.empDisruptedTurns = 1;
+      }
+      newEvents.push({
+        turn: currentTurn,
+        timestamp: Date.now(),
+        type: 'emp_pulse',
+        description: `⚡🌐 EMP BLAST DETONATED! All robot sensors, telemetry, and radar systems are BLINDED for 1 turn!`,
+        details: {},
+      });
+    }
+  }
+
+  // 2. Process Shield Actions first (defensive stance takes priority)
   for (const [botId, action] of Object.entries(actions)) {
     const bot = state.bots[botId];
     if (!bot || !bot.isAlive) continue;
@@ -113,7 +177,7 @@ export function executeTurn(
     }
   }
 
-  // 2. Process Move Actions
+  // 3. Process Move Actions
   for (const [botId, action] of Object.entries(actions)) {
     const bot = state.bots[botId];
     if (!bot || !bot.isAlive) continue;
@@ -123,7 +187,7 @@ export function executeTurn(
     }
   }
 
-  // 3. Process Attack Actions
+  // 4. Process Attack Actions
   for (const [botId, action] of Object.entries(actions)) {
     const bot = state.bots[botId];
     if (!bot || !bot.isAlive) continue;
@@ -133,8 +197,11 @@ export function executeTurn(
     }
   }
 
-  // 4. Resolve Floor Hazard Damage for bots standing on hazards
-  const isPitOpen = currentTurn >= state.config.pitOpensAtTurn;
+  // 5. Process House Robot CPZ Attacks
+  processHouseRobotAttacks(state, newEvents);
+
+  // 6. Resolve Floor Hazard Damage for bots standing on hazards (Spikes, Lava, Flames, Pit)
+  const isPitOpen = currentTurn >= state.config.pitOpensAtTurn && state.config.pitPosition.x >= 0;
   for (const bot of Object.values(state.bots)) {
     if (!bot.isAlive) continue;
 
@@ -148,41 +215,55 @@ export function executeTurn(
         type: 'pit_fall',
         actorId: bot.id,
         details: {},
-        description: `🕳️☠️ ${bot.name} stumbled directly into THE PIT! Instant KO!`,
+        description: `🕳️☠️ ${bot.name} tumbled into THE PIT! Instant KO!`,
       });
       continue;
     }
 
-    // Check Spikes / Flames
+    // Check Hazards (Lava / Spikes / Flames)
     for (const hazard of state.config.hazards) {
       if (hazard.type === 'pit') continue;
       if (hazard.isActive && bot.position.x === hazard.position.x && bot.position.y === hazard.position.y) {
-        bot.hp = Math.max(0, bot.hp - hazard.damage);
-        bot.score.hazardsTriggered++;
-        newEvents.push({
-          turn: currentTurn,
-          timestamp: Date.now(),
-          type: 'hazard_damage',
-          actorId: bot.id,
-          details: { hazardType: hazard.type, damage: hazard.damage },
-          description: `🔥⚠️ ${bot.name} was scorched by ${hazard.description} taking ${hazard.damage} hazard damage! (HP: ${bot.hp}/${bot.maxHp})`,
-        });
-        if (bot.hp === 0) {
+        if (hazard.type === 'lava') {
+          bot.hp = 0;
           bot.isAlive = false;
           newEvents.push({
             turn: currentTurn,
             timestamp: Date.now(),
-            type: 'knockout',
+            type: 'hazard_damage',
             actorId: bot.id,
-            details: { reason: 'hazard' },
-            description: `💥💀 ${bot.name} was DESTROYED by arena hazards!`,
+            details: { hazardType: 'lava' },
+            description: `🌋💀 MELTED! ${bot.name} was swallowed by MOLTEN LAVA! Instant incinerated!`,
           });
+          break;
+        } else {
+          bot.hp = Math.max(0, bot.hp - hazard.damage);
+          bot.score.hazardsTriggered++;
+          newEvents.push({
+            turn: currentTurn,
+            timestamp: Date.now(),
+            type: 'hazard_damage',
+            actorId: bot.id,
+            details: { hazardType: hazard.type, damage: hazard.damage },
+            description: `🔥⚠️ ${bot.name} took ${hazard.damage} damage from ${hazard.description}! (HP: ${bot.hp}/${bot.maxHp})`,
+          });
+          if (bot.hp === 0) {
+            bot.isAlive = false;
+            newEvents.push({
+              turn: currentTurn,
+              timestamp: Date.now(),
+              type: 'knockout',
+              actorId: bot.id,
+              details: { reason: 'hazard' },
+              description: `💥💀 ${bot.name} was destroyed by arena hazards!`,
+            });
+          }
         }
       }
     }
   }
 
-  // 5. Check Game Over Conditions
+  // 7. Check Game Over Conditions
   const aliveBots = Object.values(state.bots).filter(b => b.isAlive);
   let isGameOver = false;
   let winnerId: string | null = null;
@@ -198,11 +279,11 @@ export function executeTurn(
       timestamp: Date.now(),
       type: 'match_end',
       details: { winnerId, reason: endReason },
-      description: `🏆 VICTORY! ${aliveBots[0].name} is the champion of the arena!`,
+      description: `🏆 VICTORY! ${aliveBots[0].name} is the champion of ${state.config.name}!`,
     });
   } else if (aliveBots.length === 0) {
     isGameOver = true;
-    winnerId = null; // Draw / mutual destruction
+    winnerId = null;
     endReason = 'knockout';
     newEvents.push({
       turn: currentTurn,
@@ -214,7 +295,6 @@ export function executeTurn(
   } else if (currentTurn >= state.maxTurns) {
     isGameOver = true;
     endReason = 'judges_decision';
-    // Judge decision based on HP and score
     const [botA, botB] = aliveBots;
     const scoreA = botA.hp * 2 + botA.score.damageDealt;
     const scoreB = botB.hp * 2 + botB.score.damageDealt;
@@ -265,7 +345,6 @@ function executeMoveAction(
     return;
   }
 
-  // Calculate direction vector
   let moveDir: Direction = bot.heading;
   if (direction === 'backward') {
     moveDir = getOppositeDirection(bot.heading);
@@ -289,7 +368,22 @@ function executeMoveAction(
         type: 'collision',
         actorId: bot.id,
         details: { collision: 'wall' },
-        description: `🧱 ${bot.name} bumped into the arena perimeter wall! (3 damage)`,
+        description: `🧱 ${bot.name} bumped into the arena wall! (3 damage)`,
+      });
+      break;
+    }
+
+    // Maze Pillar collision
+    const isPillar = state.config.hazards.some(h => h.type === 'obstacle_pillar' && h.position.x === nextPos.x && h.position.y === nextPos.y);
+    if (isPillar) {
+      bot.hp = Math.max(0, bot.hp - 5);
+      events.push({
+        turn: state.turn,
+        timestamp: Date.now(),
+        type: 'collision',
+        actorId: bot.id,
+        details: { collision: 'pillar' },
+        description: `🧱 ${bot.name} slammed into a reinforced concrete pillar! (5 damage)`,
       });
       break;
     }
@@ -303,7 +397,6 @@ function executeMoveAction(
       bot.score.damageDealt += actualDamage;
       bot.score.hitsLanded++;
 
-      // Rammer takes minor recoil
       bot.hp = Math.max(0, bot.hp - 3);
 
       events.push({
@@ -316,7 +409,6 @@ function executeMoveAction(
         description: `🚜💥 RAMMING ATTACK! ${bot.name} rammed ${targetBot.name} for ${actualDamage} damage! (${targetBot.name} HP: ${targetBot.hp}/${targetBot.maxHp})`,
       });
 
-      // Push opponent back 1 tile in ram direction
       pushBot(state, targetBot, moveDir, 1, events, 'ram');
 
       if (targetBot.hp === 0 && targetBot.isAlive) {
@@ -335,7 +427,7 @@ function executeMoveAction(
     }
 
     // Pit collision
-    const isPit = nextPos.x === state.config.pitPosition.x && nextPos.y === state.config.pitPosition.y;
+    const isPit = state.config.pitPosition.x >= 0 && nextPos.x === state.config.pitPosition.x && nextPos.y === state.config.pitPosition.y;
     const isPitOpen = state.turn >= state.config.pitOpensAtTurn;
     if (isPit && isPitOpen) {
       bot.position = nextPos;
@@ -392,7 +484,7 @@ function executeAttackAction(
       type: 'stall',
       actorId: bot.id,
       details: { error: 'cooldown', currentCooldown: weapon.currentCooldown },
-      description: `⚠️ ${bot.name}'s ${weapon.name} is overheated / on cooldown (${weapon.currentCooldown} turns left)!`,
+      description: `⚠️ ${bot.name}'s ${weapon.name} is on cooldown (${weapon.currentCooldown} turns left)!`,
     });
     return;
   }
@@ -409,11 +501,9 @@ function executeAttackAction(
     return;
   }
 
-  // Consume energy and set cooldown
   bot.energy -= weapon.energyCost;
   weapon.currentCooldown = weapon.cooldown;
 
-  // Determine target tile (tile directly in front of bot)
   const offset = getOffsetForDirection(bot.heading);
   const targetTile: Position = { x: bot.position.x + offset.x, y: bot.position.y + offset.y };
 
@@ -425,12 +515,11 @@ function executeAttackAction(
       type: 'attack',
       actorId: bot.id,
       details: { weapon: weapon.name, hit: false, targetTile },
-      description: `💨 ${bot.name} unleashed ${weapon.name} at (${targetTile.x}, ${targetTile.y}) but hit empty air!`,
+      description: `💨 ${bot.name} fired ${weapon.name} at (${targetTile.x}, ${targetTile.y}) but hit empty air!`,
     });
     return;
   }
 
-  // Calculate damage
   const isArmorPiercing = weapon.specialEffect === 'armor_pierce';
   const rawDamage = Math.round(weapon.damage * Math.max(0.5, Math.min(1.5, power)));
   const { actualDamage, blockedByShield } = calculateDamage(rawDamage, targetBot, bot.heading, isArmorPiercing);
@@ -450,11 +539,9 @@ function executeAttackAction(
     description: `⚡💥 ${bot.name} struck ${targetBot.name} with ${weapon.name} for ${actualDamage} damage${shieldNote}! (${targetBot.name} HP: ${targetBot.hp}/${targetBot.maxHp})`,
   });
 
-  // Weapon special effects
   if (weapon.type === 'spinner') {
     pushBot(state, targetBot, bot.heading, 1, events, 'spinner');
   } else if (weapon.type === 'flipper') {
-    // Flipper launches opponent 2 tiles back and randomizes their heading!
     pushBot(state, targetBot, bot.heading, 2, events, 'flipper');
     if (targetBot.isAlive) {
       targetBot.heading = rotateDirection(targetBot.heading, 'turn_right');
@@ -469,7 +556,6 @@ function executeAttackAction(
     }
   }
 
-  // Check target knockout
   if (targetBot.hp === 0 && targetBot.isAlive) {
     targetBot.isAlive = false;
     events.push({
@@ -479,7 +565,7 @@ function executeAttackAction(
       actorId: bot.id,
       targetId: targetBot.id,
       details: { weapon: weapon.name },
-      description: `💥💀 KNOCKOUT! ${targetBot.name} was ripped apart by ${bot.name}'s ${weapon.name}!`,
+      description: `💥💀 KNOCKOUT! ${targetBot.name} was destroyed by ${bot.name}'s ${weapon.name}!`,
     });
   }
 }

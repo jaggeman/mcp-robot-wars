@@ -6,7 +6,13 @@ let currentState = null;
 let ws = null;
 let particleEffects = [];
 
-// DOM Elements
+// DOM Elements - Tabs
+const tabArena = document.getElementById('tab-arena');
+const tabWorkshop = document.getElementById('tab-workshop');
+const arenaViewSection = document.getElementById('arena-view-section');
+const workshopSection = document.getElementById('workshop-section');
+
+// DOM Elements - HUD
 const turnCountEl = document.getElementById('turn-count');
 const pitStatusEl = document.getElementById('pit-status');
 const botANameEl = document.getElementById('bot-a-name');
@@ -31,10 +37,44 @@ const botBDmg = document.getElementById('bot-b-dmg');
 const botBShield = document.getElementById('bot-b-shield');
 const botBWeapons = document.getElementById('bot-b-weapons');
 
+const mapSelect = document.getElementById('map-select');
 const eventLog = document.getElementById('event-log');
 const matchOverlay = document.getElementById('match-overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayMsg = document.getElementById('overlay-msg');
+
+// Workshop DOM Elements
+const wsArmor = document.getElementById('ws-armor');
+const wsArmorVal = document.getElementById('ws-armor-val');
+const wsSpeed = document.getElementById('ws-speed');
+const wsSpeedVal = document.getElementById('ws-speed-val');
+const wsEnergy = document.getElementById('ws-energy');
+const wsEnergyVal = document.getElementById('ws-energy-val');
+const wsWeapon1 = document.getElementById('ws-weapon-1');
+const wsWeapon2 = document.getElementById('ws-weapon-2');
+const wsPrompt = document.getElementById('ws-prompt');
+const wsPointsBadge = document.getElementById('ws-points-badge');
+const wsPointsBar = document.getElementById('ws-points-bar');
+const wsTokensBadge = document.getElementById('ws-tokens-badge');
+const wsTokensBar = document.getElementById('ws-tokens-bar');
+const wsFeedback = document.getElementById('ws-feedback');
+const wsCertifyBtn = document.getElementById('ws-certify-btn');
+
+// Tab Switching
+tabArena.addEventListener('click', () => {
+  tabArena.classList.add('active');
+  tabWorkshop.classList.remove('active');
+  arenaViewSection.classList.remove('hidden');
+  workshopSection.classList.add('hidden');
+});
+
+tabWorkshop.addEventListener('click', () => {
+  tabWorkshop.classList.add('active');
+  tabArena.classList.remove('active');
+  workshopSection.classList.remove('hidden');
+  arenaViewSection.classList.add('hidden');
+  updateWorkshopCalculation();
+});
 
 // Connect WebSocket
 function connectWebSocket() {
@@ -81,14 +121,20 @@ function updateHUD(state) {
   if (!state) return;
   turnCountEl.textContent = `${state.turn} / ${state.maxTurns}`;
 
-  const isPitOpen = state.turn >= state.config.pitOpensAtTurn;
-  if (isPitOpen) {
+  const isPitOpen = state.config.pitPosition.x >= 0 && state.turn >= state.config.pitOpensAtTurn;
+  if (state.config.mapType === 'lava_chamber') {
+    pitStatusEl.textContent = 'SHRINKING';
+    pitStatusEl.style.color = '#ff6600';
+  } else if (isPitOpen) {
     pitStatusEl.textContent = 'OPEN (ACTIVE)';
     pitStatusEl.style.color = '#ff3366';
-  } else {
+  } else if (state.config.pitPosition.x >= 0) {
     const left = state.config.pitOpensAtTurn - state.turn;
     pitStatusEl.textContent = `OPENS IN ${left} TURNS`;
     pitStatusEl.style.color = '#ffb700';
+  } else {
+    pitStatusEl.textContent = 'N/A';
+    pitStatusEl.style.color = '#64748b';
   }
 
   const bots = Object.values(state.bots);
@@ -161,7 +207,7 @@ function showMatchEndOverlay(state) {
   if (winner) {
     overlayTitle.textContent = `🏆 ${winner.name} WINS!`;
     overlayTitle.style.color = '#00ff88';
-    overlayMsg.textContent = `Victory by ${state.endReason ? state.endReason.toUpperCase().replace('_', ' ') : 'DOMINATION'}!`;
+    overlayMsg.textContent = `Victory in ${state.config.name} by ${state.endReason ? state.endReason.toUpperCase().replace('_', ' ') : 'DOMINATION'}!`;
   } else {
     overlayTitle.textContent = '💥 MATCH DRAW!';
     overlayTitle.style.color = '#ffb700';
@@ -170,8 +216,7 @@ function showMatchEndOverlay(state) {
 }
 
 function triggerEventFx(evt) {
-  if (evt.type === 'attack' || evt.type === 'collision') {
-    // Add spark particle burst
+  if (evt.type === 'attack' || evt.type === 'collision' || evt.type === 'house_robot_attack') {
     const actor = currentState && currentState.bots[evt.actorId];
     if (actor) {
       createSparkExplosion(actor.position.x, actor.position.y);
@@ -202,7 +247,7 @@ function createSparkExplosion(gridX, gridY) {
 // Canvas Rendering
 function renderArena(state) {
   if (!state) return;
-  const { width, height, pitPosition, pitOpensAtTurn, hazards } = state.config;
+  const { width, height, pitPosition, pitOpensAtTurn, hazards, houseRobots, mapType } = state.config;
   const cellSize = canvas.width / width;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -219,45 +264,78 @@ function renderArena(state) {
     }
   }
 
-  // Draw Hazards
-  const isPitOpen = state.turn >= pitOpensAtTurn;
+  // Draw House Robot Corner Patrol Zones (CPZ)
+  if (houseRobots && houseRobots.length > 0) {
+    houseRobots.forEach(h => {
+      const z = h.homeZone;
+      const zx = z.minX * cellSize;
+      const zy = z.minY * cellSize;
+      const zw = (z.maxX - z.minX + 1) * cellSize;
+      const zh = (z.maxY - z.minY + 1) * cellSize;
 
-  // The Pit
-  const pitPx = pitPosition.x * cellSize;
-  const pitPy = pitPosition.y * cellSize;
-  if (isPitOpen) {
-    ctx.fillStyle = '#ff0044';
-    ctx.shadowColor = '#ff0044';
-    ctx.shadowBlur = 15;
-    ctx.fillRect(pitPx + 2, pitPy + 2, cellSize - 4, cellSize - 4);
-    ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255, 51, 102, 0.08)';
+      ctx.fillRect(zx, zy, zw, zh);
+      ctx.strokeStyle = 'rgba(255, 51, 102, 0.4)';
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(zx, zy, zw, zh);
+      ctx.setLineDash([]);
 
-    ctx.fillStyle = '#000';
-    ctx.font = `bold ${cellSize * 0.4}px Orbitron`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('PIT', pitPx + cellSize / 2, pitPy + cellSize / 2);
-  } else {
-    ctx.fillStyle = '#3a2d0b';
-    ctx.fillRect(pitPx + 2, pitPy + 2, cellSize - 4, cellSize - 4);
-    ctx.strokeStyle = '#ffb700';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(pitPx + 4, pitPy + 4, cellSize - 8, cellSize - 8);
-
-    ctx.fillStyle = '#ffb700';
-    ctx.font = `bold ${cellSize * 0.28}px Orbitron`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`LOCKED`, pitPx + cellSize / 2, pitPy + cellSize / 2);
+      // Draw House Robot Guardian
+      const hx = h.position.x * cellSize + cellSize / 2;
+      const hy = h.position.y * cellSize + cellSize / 2;
+      ctx.font = `${cellSize * 0.6}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(h.id.includes('killalot') ? '🛡️' : '🐗', hx, hy);
+    });
   }
 
-  // Spikes & Flame grates
+  // Draw Hazards (Pit, Spikes, Flames, Lava, Pillars)
+  const isPitOpen = pitPosition.x >= 0 && state.turn >= pitOpensAtTurn;
+
+  // The Pit
+  if (pitPosition.x >= 0) {
+    const pitPx = pitPosition.x * cellSize;
+    const pitPy = pitPosition.y * cellSize;
+    if (isPitOpen) {
+      ctx.fillStyle = '#ff0044';
+      ctx.shadowColor = '#ff0044';
+      ctx.shadowBlur = 15;
+      ctx.fillRect(pitPx + 2, pitPy + 2, cellSize - 4, cellSize - 4);
+      ctx.shadowBlur = 0;
+
+      ctx.fillStyle = '#000';
+      ctx.font = `bold ${cellSize * 0.4}px Orbitron`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('PIT', pitPx + cellSize / 2, pitPy + cellSize / 2);
+    } else {
+      ctx.fillStyle = '#3a2d0b';
+      ctx.fillRect(pitPx + 2, pitPy + 2, cellSize - 4, cellSize - 4);
+      ctx.strokeStyle = '#ffb700';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pitPx + 4, pitPy + 4, cellSize - 8, cellSize - 8);
+
+      ctx.fillStyle = '#ffb700';
+      ctx.font = `bold ${cellSize * 0.28}px Orbitron`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`LOCKED`, pitPx + cellSize / 2, pitPy + cellSize / 2);
+    }
+  }
+
+  // Other Hazards
   hazards.forEach(h => {
     if (h.type === 'pit') return;
     const hx = h.position.x * cellSize;
     const hy = h.position.y * cellSize;
 
-    if (h.type === 'spikes') {
+    if (h.type === 'lava') {
+      ctx.fillStyle = 'rgba(255, 68, 0, 0.85)';
+      ctx.fillRect(hx, hy, cellSize, cellSize);
+      ctx.strokeStyle = '#ffea00';
+      ctx.strokeRect(hx + 1, hy + 1, cellSize - 2, cellSize - 2);
+    } else if (h.type === 'spikes') {
       ctx.fillStyle = 'rgba(0, 240, 255, 0.15)';
       ctx.fillRect(hx + 3, hy + 3, cellSize - 6, cellSize - 6);
       ctx.fillStyle = '#00f0ff';
@@ -273,6 +351,17 @@ function renderArena(state) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('🔥', hx + cellSize / 2, hy + cellSize / 2);
+    } else if (h.type === 'obstacle_pillar') {
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(hx + 2, hy + 2, cellSize - 4, cellSize - 4);
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(hx + 2, hy + 2, cellSize - 4, cellSize - 4);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = `bold ${cellSize * 0.35}px Orbitron`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🧱', hx + cellSize / 2, hy + cellSize / 2);
     }
   });
 
@@ -280,7 +369,6 @@ function renderArena(state) {
   const bots = Object.values(state.bots);
   bots.forEach((bot, idx) => {
     if (!bot.isAlive) {
-      // Draw Wreckage
       const wx = bot.position.x * cellSize + cellSize / 2;
       const wy = bot.position.y * cellSize + cellSize / 2;
       ctx.fillStyle = '#475569';
@@ -299,7 +387,6 @@ function renderArena(state) {
     ctx.save();
     ctx.translate(bx, by);
 
-    // Rotation based on heading
     const angleMap = { E: 0, S: Math.PI / 2, W: Math.PI, N: -Math.PI / 2 };
     ctx.rotate(angleMap[bot.heading] || 0);
 
@@ -312,7 +399,7 @@ function renderArena(state) {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Heading Pointer / Weapon Wedge
+    // Heading Pointer / Wedge
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.moveTo(botRadius * 0.9, 0);
@@ -335,7 +422,7 @@ function renderArena(state) {
 
     ctx.restore();
 
-    // HP Mini-bar above bot
+    // Mini HP-bar above bot
     const barW = cellSize * 0.8;
     const barH = 4;
     const barX = bx - barW / 2;
@@ -367,23 +454,83 @@ function renderArena(state) {
   }
 }
 
-// Continuous render loop for animations & particles
 function animationLoop() {
-  if (currentState) {
+  if (currentState && !arenaViewSection.classList.contains('hidden')) {
     renderArena(currentState);
   }
   requestAnimationFrame(animationLoop);
 }
 
+// Workshop Real-time Calculation
+function updateWorkshopCalculation() {
+  const armor = parseInt(wsArmor.value, 10);
+  const speed = parseInt(wsSpeed.value, 10);
+  const energy = parseInt(wsEnergy.value, 10);
+  const w1 = wsWeapon1.value;
+  const w2 = wsWeapon2.value;
+  const promptText = wsPrompt.value;
+
+  wsArmorVal.textContent = `${armor}% (${Math.round(armor / 2)} pts)`;
+  wsSpeedVal.textContent = `Speed ${speed} (${Math.max(0, (speed - 1) * 15)} pts)`;
+  wsEnergyVal.textContent = `${energy} Energy (${Math.max(0, Math.round((energy - 80) / 2))} pts)`;
+
+  const weaponCosts = { spinner: 35, flipper: 25, axe: 25, ram: 10, none: 0 };
+  const w1Cost = weaponCosts[w1] || 0;
+  const w2Cost = weaponCosts[w2] || 0;
+
+  const totalPoints = Math.round(armor / 2) + Math.max(0, (speed - 1) * 15) + Math.max(0, Math.round((energy - 80) / 2)) + w1Cost + w2Cost;
+  
+  // Estimate tokens
+  const words = promptText.trim().split(/\s+/).filter(Boolean).length;
+  const estimatedTokens = Math.ceil(Math.max(words * 1.3, promptText.length / 3.8));
+
+  // Update Badges
+  wsPointsBadge.textContent = `${totalPoints} / 100 PTS`;
+  wsPointsBadge.className = totalPoints <= 100 ? 'badge-good' : 'badge-bad';
+  wsPointsBar.style.width = `${Math.min(100, (totalPoints / 100) * 100)}%`;
+  wsPointsBar.className = `bar-fill ${totalPoints <= 100 ? 'hp-bar-b' : 'hp-bar-a'}`;
+
+  wsTokensBadge.textContent = `${estimatedTokens} / 500 TOKENS`;
+  wsTokensBadge.className = estimatedTokens <= 500 ? 'badge-good' : 'badge-bad';
+  wsTokensBar.style.width = `${Math.min(100, (estimatedTokens / 500) * 100)}%`;
+  wsTokensBar.className = `bar-fill ${estimatedTokens <= 500 ? 'energy-bar' : 'hp-bar-a'}`;
+
+  if (totalPoints > 100) {
+    wsFeedback.className = 'ws-feedback invalid';
+    wsFeedback.textContent = `❌ Overweight! Total weight points (${totalPoints} pts) exceed 100 pts budget.`;
+  } else if (estimatedTokens > 500) {
+    wsFeedback.className = 'ws-feedback invalid';
+    wsFeedback.textContent = `❌ Prompt too large! Estimated token count (${estimatedTokens}) exceeds 500 limit.`;
+  } else {
+    wsFeedback.className = 'ws-feedback valid';
+    wsFeedback.textContent = `✅ Combat Legal! Blueprint verified within 100 pts and 500 tokens.`;
+  }
+}
+
+[wsArmor, wsSpeed, wsEnergy, wsWeapon1, wsWeapon2].forEach(el => {
+  el.addEventListener('input', updateWorkshopCalculation);
+});
+wsPrompt.addEventListener('input', updateWorkshopCalculation);
+
+wsCertifyBtn.addEventListener('click', () => {
+  updateWorkshopCalculation();
+  if (wsFeedback.classList.contains('valid')) {
+    alert(`🎉 Blueprint Certified! Saved to local workshop.`);
+  } else {
+    alert(`⚠️ Cannot certify! Please resolve budget errors first.`);
+  }
+});
+
 // Button Handlers
 document.getElementById('start-btn').addEventListener('click', async () => {
   const bot1Strategy = document.getElementById('bot1-strategy').value;
   const bot2Strategy = document.getElementById('bot2-strategy').value;
+  const mapType = mapSelect.value;
 
   await fetch('/api/matches/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bot1Strategy, bot2Strategy }),
+    body: JSON.stringify({ bot1Strategy, bot2Strategy, mapType }),
   });
 });
 
@@ -396,19 +543,21 @@ document.getElementById('pause-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('reset-btn').addEventListener('click', async () => {
+  const mapType = mapSelect.value;
   await fetch('/api/matches/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ mapType }),
   });
 });
 
 document.getElementById('overlay-restart-btn').addEventListener('click', async () => {
   matchOverlay.classList.add('hidden');
+  const mapType = mapSelect.value;
   await fetch('/api/matches/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ mapType }),
   });
 });
 

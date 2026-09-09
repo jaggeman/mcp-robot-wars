@@ -9,6 +9,7 @@ export const STANDARD_WEAPONS: Record<WeaponType, WeaponConfig> = {
     range: 1,
     cooldown: 1,
     currentCooldown: 0,
+    weightPoints: 35,
     specialEffect: 'push',
   },
   flipper: {
@@ -19,6 +20,7 @@ export const STANDARD_WEAPONS: Record<WeaponType, WeaponConfig> = {
     range: 1,
     cooldown: 0,
     currentCooldown: 0,
+    weightPoints: 25,
     specialEffect: 'push',
   },
   axe: {
@@ -29,6 +31,7 @@ export const STANDARD_WEAPONS: Record<WeaponType, WeaponConfig> = {
     range: 1,
     cooldown: 1,
     currentCooldown: 0,
+    weightPoints: 25,
     specialEffect: 'armor_pierce',
   },
   ram: {
@@ -39,6 +42,7 @@ export const STANDARD_WEAPONS: Record<WeaponType, WeaponConfig> = {
     range: 1,
     cooldown: 0,
     currentCooldown: 0,
+    weightPoints: 10,
     specialEffect: 'push',
   },
 };
@@ -58,14 +62,15 @@ export function createBot(blueprint: BotBlueprint, startPos = { x: 0, y: 0 }, st
     maxHp: blueprint.maxHp ?? 100,
     energy: blueprint.maxEnergy ?? 100,
     maxEnergy: blueprint.maxEnergy ?? 100,
-    armor: blueprint.armor ?? 10, // 10% base damage reduction
-    speed: blueprint.speed ?? 2, // max 2 steps per turn
+    armor: blueprint.armor ?? 10,
+    speed: blueprint.speed ?? 2,
     weapons: (blueprint.weapons && blueprint.weapons.length > 0)
       ? blueprint.weapons.map(w => ({ ...w, currentCooldown: 0 }))
       : defaultWeapons,
     activeShield: null,
     isAlive: true,
     isStalled: false,
+    empDisruptedTurns: 0,
     score: {
       damageDealt: 0,
       hitsLanded: 0,

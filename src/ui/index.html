@@ -3,24 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP Robot Wars - Autonomous Arena</title>
+  <title>MCP Robot Wars - Autonomous Arena & Workshop</title>
   <link rel="stylesheet" href="style.css">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-container">
-    <!-- Header with Top Match Controls -->
+    <!-- Header with Top Match Controls & Tab Switcher -->
     <header class="header">
       <div class="logo">
         <span class="logo-icon">🤖⚔️</span>
         <h1>MCP ROBOT WARS</h1>
-        <span class="badge">LIVE ARENA</span>
+        <span class="badge">V1.2 PRO</span>
       </div>
 
-      <!-- Action Buttons in Header for Instant Visibility -->
+      <!-- Tab Switcher -->
+      <nav class="nav-tabs">
+        <button id="tab-arena" class="tab-btn active">🏟️ LIVE ARENA</button>
+        <button id="tab-workshop" class="tab-btn">🛠️ WORKSHOP (BUILDER)</button>
+      </nav>
+
+      <!-- Action Buttons in Header -->
       <div class="header-controls">
         <button id="start-btn" class="btn btn-primary pulse-btn">⚔️ START BATTLE</button>
-        <button id="step-btn" class="btn btn-secondary">⏯️ STEP TURN</button>
+        <button id="step-btn" class="btn btn-secondary">⏯️ STEP</button>
         <button id="pause-btn" class="btn btn-secondary">⏸️ PAUSE</button>
         <button id="reset-btn" class="btn btn-danger">🔄 RESET</button>
       </div>
@@ -31,114 +37,231 @@
       </div>
     </header>
 
-    <!-- Strategy Selector Bar -->
-    <div class="strategy-bar">
-      <div class="strategy-group">
-        <span class="strategy-label red-dot">🔴 Bot 1 Strategy:</span>
-        <select id="bot1-strategy" class="strategy-select">
-          <option value="aggressive">Aggressive (Spinner Rush)</option>
-          <option value="tactical">Tactical (Defensive Shield)</option>
-        </select>
+    <!-- ARENA VIEW TAB -->
+    <div id="arena-view-section">
+      <!-- Strategy & Map Selector Bar -->
+      <div class="strategy-bar">
+        <div class="strategy-group">
+          <span class="strategy-label red-dot">🔴 Bot 1:</span>
+          <select id="bot1-strategy" class="strategy-select">
+            <option value="aggressive">Aggressive (Spinner Rush)</option>
+            <option value="tactical">Tactical (Shield/Defense)</option>
+          </select>
+        </div>
+
+        <div class="strategy-group">
+          <span class="strategy-label">🗺️ Arena Map:</span>
+          <select id="map-select" class="strategy-select map-select">
+            <option value="colosseum" selected>The Steel Colosseum (House Robots)</option>
+            <option value="lava_chamber">Molten Lava Basin (Battle Royale Shrink)</option>
+            <option value="emp_cyberdome">EMP Cyberdome (Radar Blackout)</option>
+            <option value="the_maze">The Concrete Maze (Pillars & Chokepoints)</option>
+          </select>
+        </div>
+
+        <div class="strategy-group">
+          <span class="strategy-label blue-dot">🔵 Bot 2:</span>
+          <select id="bot2-strategy" class="strategy-select">
+            <option value="tactical" selected>Tactical (Shield/Defense)</option>
+            <option value="aggressive">Aggressive (Spinner Rush)</option>
+          </select>
+        </div>
       </div>
-      <div class="arena-tag">🏟️ <span id="arena-name">The Steel Colosseum</span></div>
-      <div class="strategy-group">
-        <span class="strategy-label blue-dot">🔵 Bot 2 Strategy:</span>
-        <select id="bot2-strategy" class="strategy-select">
-          <option value="tactical" selected>Tactical (Defensive Shield)</option>
-          <option value="aggressive">Aggressive (Spinner Rush)</option>
-        </select>
-      </div>
+
+      <!-- Main Battleground Grid -->
+      <main class="main-layout">
+        <!-- Left Panel: Bot A HUD -->
+        <aside class="bot-hud bot-a">
+          <div class="bot-card" id="bot-a-card">
+            <div class="bot-header">
+              <div class="bot-avatar bot-a-glow">🔴</div>
+              <div>
+                <h2 id="bot-a-name">HYPNO-DISC</h2>
+                <span class="bot-role">PRIMARY CONTENDER</span>
+              </div>
+            </div>
+            
+            <div class="stat-group">
+              <div class="stat-label"><span>ARMOR INTEGRITY (HP)</span><span id="bot-a-hp-text">100/100</span></div>
+              <div class="bar-track"><div id="bot-a-hp-bar" class="bar-fill hp-bar-a" style="width: 100%"></div></div>
+            </div>
+
+            <div class="stat-group">
+              <div class="stat-label"><span>ENERGY CAPACITOR</span><span id="bot-a-energy-text">100/100</span></div>
+              <div class="bar-track"><div id="bot-a-energy-bar" class="bar-fill energy-bar" style="width: 100%"></div></div>
+            </div>
+
+            <div class="telemetry-box">
+              <div class="telemetry-item"><span class="lbl">POS:</span> <span id="bot-a-pos" class="val">(1, 1)</span></div>
+              <div class="telemetry-item"><span class="lbl">HEADING:</span> <span id="bot-a-heading" class="val">EAST</span></div>
+              <div class="telemetry-item"><span class="lbl">DAMAGE:</span> <span id="bot-a-dmg" class="val">0</span></div>
+              <div class="telemetry-item"><span class="lbl">SHIELD:</span> <span id="bot-a-shield" class="val">OFF</span></div>
+            </div>
+
+            <div class="weapon-list" id="bot-a-weapons"></div>
+          </div>
+        </aside>
+
+        <!-- Center: The Canvas Arena -->
+        <section class="arena-center">
+          <div class="canvas-wrapper">
+            <canvas id="arena-canvas" width="540" height="540"></canvas>
+            <div id="match-overlay" class="match-overlay hidden">
+              <div class="overlay-content">
+                <h2 id="overlay-title">VICTORY</h2>
+                <p id="overlay-msg">Hypno-Disc destroyed Chaos-2!</p>
+                <button id="overlay-restart-btn" class="btn btn-primary pulse-btn">⚔️ FIGHT AGAIN</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right Panel: Bot B HUD -->
+        <aside class="bot-hud bot-b">
+          <div class="bot-card" id="bot-b-card">
+            <div class="bot-header">
+              <div class="bot-avatar bot-b-glow">🔵</div>
+              <div>
+                <h2 id="bot-b-name">CHAOS-2</h2>
+                <span class="bot-role">CHALLENGER</span>
+              </div>
+            </div>
+            
+            <div class="stat-group">
+              <div class="stat-label"><span>ARMOR INTEGRITY (HP)</span><span id="bot-b-hp-text">100/100</span></div>
+              <div class="bar-track"><div id="bot-b-hp-bar" class="bar-fill hp-bar-b" style="width: 100%"></div></div>
+            </div>
+
+            <div class="stat-group">
+              <div class="stat-label"><span>ENERGY CAPACITOR</span><span id="bot-b-energy-text">100/100</span></div>
+              <div class="bar-track"><div id="bot-b-energy-bar" class="bar-fill energy-bar" style="width: 100%"></div></div>
+            </div>
+
+            <div class="telemetry-box">
+              <div class="telemetry-item"><span class="lbl">POS:</span> <span id="bot-b-pos" class="val">(10, 10)</span></div>
+              <div class="telemetry-item"><span class="lbl">HEADING:</span> <span id="bot-b-heading" class="val">WEST</span></div>
+              <div class="telemetry-item"><span class="lbl">DAMAGE:</span> <span id="bot-b-dmg" class="val">0</span></div>
+              <div class="telemetry-item"><span class="lbl">SHIELD:</span> <span id="bot-b-shield" class="val">OFF</span></div>
+            </div>
+
+            <div class="weapon-list" id="bot-b-weapons"></div>
+          </div>
+        </aside>
+      </main>
+
+      <!-- Bottom: Live Event Log & Combat Feed -->
+      <footer class="event-feed-section">
+        <div class="feed-header">
+          <span>📡 LIVE ARENA COMBAT TELEMETRY STREAM (MCP PROTOCOL)</span>
+          <button id="clear-feed" class="btn-text">CLEAR</button>
+        </div>
+        <div class="event-log-container" id="event-log"></div>
+      </footer>
     </div>
 
-    <!-- Main Battleground Grid -->
-    <main class="main-layout">
-      <!-- Left Panel: Bot A HUD -->
-      <aside class="bot-hud bot-a">
-        <div class="bot-card" id="bot-a-card">
-          <div class="bot-header">
-            <div class="bot-avatar bot-a-glow">🔴</div>
-            <div>
-              <h2 id="bot-a-name">HYPNO-DISC</h2>
-              <span class="bot-role">PRIMARY CONTENDER</span>
+    <!-- WORKSHOP / BOT BUILDER TAB -->
+    <div id="workshop-section" class="workshop-section hidden">
+      <div class="workshop-grid">
+        <!-- Blueprint Builder Form -->
+        <div class="workshop-card">
+          <div class="workshop-header">
+            <h2>🛠️ BOT SPECIFICATION & WEIGHT ALLOCATOR</h2>
+            <p>Allocate component points within the strict <strong>100 Weight Point</strong> budget.</p>
+          </div>
+
+          <div class="form-group">
+            <label>Robot Name:</label>
+            <input type="text" id="ws-bot-name" class="ws-input" value="NIGHTMARE-9">
+          </div>
+
+          <div class="form-group">
+            <div class="slider-header">
+              <span>Armor Plating (0 - 40%):</span>
+              <span id="ws-armor-val" class="highlight">20% (10 pts)</span>
+            </div>
+            <input type="range" id="ws-armor" min="0" max="40" step="2" value="20" class="slider">
+          </div>
+
+          <div class="form-group">
+            <div class="slider-header">
+              <span>Motor Speed / Drive (1 - 3 Steps):</span>
+              <span id="ws-speed-val" class="highlight">Speed 2 (15 pts)</span>
+            </div>
+            <input type="range" id="ws-speed" min="1" max="3" step="1" value="2" class="slider">
+          </div>
+
+          <div class="form-group">
+            <div class="slider-header">
+              <span>Energy Battery Bank (80 - 140 Energy):</span>
+              <span id="ws-energy-val" class="highlight">100 Energy (10 pts)</span>
+            </div>
+            <input type="range" id="ws-energy" min="80" max="140" step="10" value="100" class="slider">
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-col">
+              <label>Primary Weapon:</label>
+              <select id="ws-weapon-1" class="ws-select">
+                <option value="spinner" selected>High-Velocity Spinner (35 pts)</option>
+                <option value="flipper">Pneumatic Flipper (25 pts)</option>
+                <option value="axe">Titanium Top-Axe (25 pts)</option>
+                <option value="ram">Reinforced Wedge (10 pts)</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label>Secondary Weapon:</label>
+              <select id="ws-weapon-2" class="ws-select">
+                <option value="ram" selected>Reinforced Wedge (10 pts)</option>
+                <option value="none">None (0 pts)</option>
+                <option value="flipper">Pneumatic Flipper (25 pts)</option>
+                <option value="axe">Titanium Top-Axe (25 pts)</option>
+                <option value="spinner">High-Velocity Spinner (35 pts)</option>
+              </select>
             </div>
           </div>
-          
-          <div class="stat-group">
-            <div class="stat-label"><span>ARMOR INTEGRITY (HP)</span><span id="bot-a-hp-text">100/100</span></div>
-            <div class="bar-track"><div id="bot-a-hp-bar" class="bar-fill hp-bar-a" style="width: 100%"></div></div>
-          </div>
-
-          <div class="stat-group">
-            <div class="stat-label"><span>ENERGY CAPACITOR</span><span id="bot-a-energy-text">100/100</span></div>
-            <div class="bar-track"><div id="bot-a-energy-bar" class="bar-fill energy-bar" style="width: 100%"></div></div>
-          </div>
-
-          <div class="telemetry-box">
-            <div class="telemetry-item"><span class="lbl">POS:</span> <span id="bot-a-pos" class="val">(1, 1)</span></div>
-            <div class="telemetry-item"><span class="lbl">HEADING:</span> <span id="bot-a-heading" class="val">EAST</span></div>
-            <div class="telemetry-item"><span class="lbl">DAMAGE:</span> <span id="bot-a-dmg" class="val">0</span></div>
-            <div class="telemetry-item"><span class="lbl">SHIELD:</span> <span id="bot-a-shield" class="val">OFF</span></div>
-          </div>
-
-          <div class="weapon-list" id="bot-a-weapons"></div>
         </div>
-      </aside>
 
-      <!-- Center: The Canvas Arena -->
-      <section class="arena-center">
-        <div class="canvas-wrapper">
-          <canvas id="arena-canvas" width="540" height="540"></canvas>
-          <div id="match-overlay" class="match-overlay hidden">
-            <div class="overlay-content">
-              <h2 id="overlay-title">VICTORY</h2>
-              <p id="overlay-msg">Hypno-Disc destroyed Chaos-2!</p>
-              <button id="overlay-restart-btn" class="btn btn-primary pulse-btn">⚔️ FIGHT AGAIN</button>
+        <!-- Token Budget & System Prompt Editor -->
+        <div class="workshop-card">
+          <div class="workshop-header">
+            <h2>🧠 AGENT SYSTEM PROMPT & TOKEN BUDGET</h2>
+            <p>Define your AI's tactical behavior. Max <strong>500 Tokens</strong>.</p>
+          </div>
+
+          <div class="form-group">
+            <textarea id="ws-prompt" class="ws-textarea" rows="8">You are Nightmare-9, an aggressive predator robot.
+Your goal is to destroy the opponent by tracking them on radar.
+If the enemy is adjacent, discharge your primary spinner weapon with full power.
+Avoid the central Pit of Oblivion at all costs.</textarea>
+          </div>
+
+          <!-- Budget Gauges -->
+          <div class="budget-meters">
+            <div class="meter-box">
+              <div class="meter-label">
+                <span>WEIGHT BUDGET</span>
+                <span id="ws-points-badge" class="badge-good">80 / 100 PTS</span>
+              </div>
+              <div class="bar-track"><div id="ws-points-bar" class="bar-fill hp-bar-b" style="width: 80%"></div></div>
+            </div>
+
+            <div class="meter-box">
+              <div class="meter-label">
+                <span>SYSTEM PROMPT TOKENS</span>
+                <span id="ws-tokens-badge" class="badge-good">48 / 500 TOKENS</span>
+              </div>
+              <div class="bar-track"><div id="ws-tokens-bar" class="bar-fill energy-bar" style="width: 10%"></div></div>
             </div>
           </div>
+
+          <div id="ws-feedback" class="ws-feedback valid">
+            ✅ Blueprint is combat legal and ready for the arena!
+          </div>
+
+          <button id="ws-certify-btn" class="btn btn-primary" style="margin-top: 12px; width: 100%;">🛡️ CERTIFY & SAVE BLUEPRINT</button>
         </div>
-      </section>
-
-      <!-- Right Panel: Bot B HUD -->
-      <aside class="bot-hud bot-b">
-        <div class="bot-card" id="bot-b-card">
-          <div class="bot-header">
-            <div class="bot-avatar bot-b-glow">🔵</div>
-            <div>
-              <h2 id="bot-b-name">CHAOS-2</h2>
-              <span class="bot-role">CHALLENGER</span>
-            </div>
-          </div>
-          
-          <div class="stat-group">
-            <div class="stat-label"><span>ARMOR INTEGRITY (HP)</span><span id="bot-b-hp-text">100/100</span></div>
-            <div class="bar-track"><div id="bot-b-hp-bar" class="bar-fill hp-bar-b" style="width: 100%"></div></div>
-          </div>
-
-          <div class="stat-group">
-            <div class="stat-label"><span>ENERGY CAPACITOR</span><span id="bot-b-energy-text">100/100</span></div>
-            <div class="bar-track"><div id="bot-b-energy-bar" class="bar-fill energy-bar" style="width: 100%"></div></div>
-          </div>
-
-          <div class="telemetry-box">
-            <div class="telemetry-item"><span class="lbl">POS:</span> <span id="bot-b-pos" class="val">(10, 10)</span></div>
-            <div class="telemetry-item"><span class="lbl">HEADING:</span> <span id="bot-b-heading" class="val">WEST</span></div>
-            <div class="telemetry-item"><span class="lbl">DAMAGE:</span> <span id="bot-b-dmg" class="val">0</span></div>
-            <div class="telemetry-item"><span class="lbl">SHIELD:</span> <span id="bot-b-shield" class="val">OFF</span></div>
-          </div>
-
-          <div class="weapon-list" id="bot-b-weapons"></div>
-        </div>
-      </aside>
-    </main>
-
-    <!-- Bottom: Live Event Log & Combat Feed -->
-    <footer class="event-feed-section">
-      <div class="feed-header">
-        <span>📡 LIVE ARENA COMBAT TELEMETRY STREAM (MCP PROTOCOL)</span>
-        <button id="clear-feed" class="btn-text">CLEAR</button>
       </div>
-      <div class="event-log-container" id="event-log"></div>
-    </footer>
+    </div>
   </div>
 
   <script src="arena-view.js"></script>

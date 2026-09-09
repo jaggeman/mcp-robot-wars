@@ -6,6 +6,8 @@ export type WeaponType = 'spinner' | 'flipper' | 'axe' | 'ram';
 
 export type ShieldDirection = 'front' | 'rear' | 'left' | 'right';
 
+export type MapType = 'colosseum' | 'lava_chamber' | 'emp_cyberdome' | 'the_maze';
+
 export interface Position {
   x: number;
   y: number;
@@ -16,9 +18,10 @@ export interface WeaponConfig {
   name: string;
   damage: number;
   energyCost: number;
-  range: number; // usually 1 tile
-  cooldown: number; // turns
+  range: number;
+  cooldown: number;
   currentCooldown: number;
+  weightPoints: number;
   specialEffect?: 'push' | 'armor_pierce' | 'continuous';
 }
 
@@ -27,9 +30,11 @@ export interface BotBlueprint {
   name: string;
   maxHp?: number;
   maxEnergy?: number;
-  armor?: number; // percentage reduction or flat
-  speed?: number; // max tiles per move
+  armor?: number; // e.g., 0-50%
+  speed?: number; // 1-3
   weapons?: WeaponConfig[];
+  systemPrompt?: string;
+  tokenCount?: number;
 }
 
 export interface BotState {
@@ -47,6 +52,7 @@ export interface BotState {
   activeShield: ShieldDirection | null;
   isAlive: boolean;
   isStalled: boolean;
+  empDisruptedTurns: number;
   score: {
     damageDealt: number;
     hitsLanded: number;
@@ -55,7 +61,20 @@ export interface BotState {
   };
 }
 
-export type HazardType = 'pit' | 'spikes' | 'flame_grate' | 'wall';
+export interface HouseRobot {
+  id: string;
+  name: string;
+  avatar: string;
+  position: Position;
+  homeZone: { minX: number; maxX: number; minY: number; maxY: number };
+  hp: number;
+  maxHp: number;
+  damage: number;
+  weaponName: string;
+  isActive: boolean;
+}
+
+export type HazardType = 'pit' | 'spikes' | 'flame_grate' | 'wall' | 'lava' | 'obstacle_pillar';
 
 export interface Hazard {
   id: string;
@@ -68,13 +87,20 @@ export interface Hazard {
 }
 
 export interface ArenaConfig {
+  mapType: MapType;
   name: string;
+  description: string;
   width: number;
   height: number;
   pitPosition: Position;
   pitOpensAtTurn: number;
   hazards: Hazard[];
+  houseRobots?: HouseRobot[];
   maxTurns: number;
+  specialRules?: {
+    lavaShrinkInterval?: number; // turns per ring collapse
+    empPulseInterval?: number;   // turns per EMP blackout
+  };
 }
 
 export type ActionType = 'move' | 'attack' | 'shield' | 'wait';
@@ -113,6 +139,9 @@ export interface GameEvent {
     | 'hazard_activated'
     | 'hazard_damage'
     | 'pit_fall'
+    | 'house_robot_attack'
+    | 'emp_pulse'
+    | 'lava_collapse'
     | 'knockout'
     | 'stall'
     | 'match_end';
@@ -127,6 +156,7 @@ export interface ArenaState {
   maxTurns: number;
   config: ArenaConfig;
   bots: Record<string, BotState>;
+  houseRobots: HouseRobot[];
   winnerId: string | null;
   isGameOver: boolean;
   endReason: 'knockout' | 'pit_fall' | 'judges_decision' | 'forfeit' | null;
@@ -136,6 +166,7 @@ export interface ArenaState {
 export interface RadarScanResult {
   ownPosition: Position;
   ownHeading: Direction;
+  isEmpDisrupted: boolean;
   arenaSize: { width: number; height: number };
   pit: {
     position: Position;
@@ -147,8 +178,8 @@ export interface RadarScanResult {
     name: string;
     position: Position;
     distance: number;
-    relativeAngle: number; // degrees relative to own heading
-    hpEstimate: number; // approximate or exact
+    relativeAngle: number;
+    hpEstimate: number;
     heading: Direction;
   }>;
   nearbyHazards: Array<{
@@ -157,10 +188,29 @@ export interface RadarScanResult {
     isActive: boolean;
     distance: number;
   }>;
+  houseRobots: Array<{
+    name: string;
+    position: Position;
+    distance: number;
+    isInZone: boolean;
+  }>;
   adjacentObstacles: {
     front: boolean;
     rear: boolean;
     left: boolean;
     right: boolean;
   };
+}
+
+export interface WorkshopBudgetBreakdown {
+  totalPoints: number;
+  maxPoints: number;
+  isValid: boolean;
+  armorPoints: number;
+  speedPoints: number;
+  energyPoints: number;
+  weaponPoints: number;
+  tokenCount: number;
+  maxTokens: number;
+  errors: string[];
 }

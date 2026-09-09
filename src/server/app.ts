@@ -5,8 +5,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { MatchRunner } from '../runner/match.js';
 import { HeuristicBot } from '../bots/heuristic-bot.js';
-import { createDefaultArena } from '../engine/arena.js';
-import { ArenaState, GameEvent } from '../engine/types.js';
+import { createArenaMap } from '../engine/arena.js';
+import { ArenaState, GameEvent, MapType } from '../engine/types.js';
+import { validateBotBlueprint } from '../engine/workshop.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,15 +30,15 @@ function broadcast(type: string, data: unknown) {
   });
 }
 
-function startNewMatch(bot1Type = 'aggressive', bot2Type = 'tactical', width = 12, height = 12) {
+function startNewMatch(bot1Strategy = 'aggressive', bot2Strategy = 'tactical', mapType: MapType = 'colosseum') {
   if (currentRunner) {
     currentRunner.stop();
   }
 
-  const bot1 = new HeuristicBot('bot-1', 'HYPNO-DISC', bot1Type as any);
-  const bot2 = new HeuristicBot('bot-2', 'CHAOS-2', bot2Type as any);
+  const bot1 = new HeuristicBot('bot-1', 'HYPNO-DISC', bot1Strategy as any);
+  const bot2 = new HeuristicBot('bot-2', 'CHAOS-2', bot2Strategy as any);
 
-  const arenaConfig = createDefaultArena(width, height, 30);
+  const arenaConfig = createArenaMap(mapType, 12, 12, 30);
 
   currentRunner = new MatchRunner([bot1, bot2], {
     config: arenaConfig,
@@ -64,8 +65,8 @@ app.get('/api/matches/current', (req, res) => {
 });
 
 app.post('/api/matches/start', (req, res) => {
-  const { bot1Strategy, bot2Strategy, width, height } = req.body || {};
-  const runner = startNewMatch(bot1Strategy || 'aggressive', bot2Strategy || 'tactical', width || 12, height || 12);
+  const { bot1Strategy, bot2Strategy, mapType } = req.body || {};
+  const runner = startNewMatch(bot1Strategy || 'aggressive', bot2Strategy || 'tactical', mapType || 'colosseum');
   runner.run();
   res.json({ success: true, message: 'Match started', state: runner.getState() });
 });
@@ -86,6 +87,12 @@ app.post('/api/matches/pause', (req, res) => {
 app.post('/api/matches/resume', (req, res) => {
   if (currentRunner) currentRunner.resume();
   res.json({ success: true });
+});
+
+app.post('/api/workshop/validate', (req, res) => {
+  const blueprint = req.body;
+  const result = validateBotBlueprint(blueprint);
+  res.json(result);
 });
 
 wss.on('connection', (ws) => {
