@@ -1,0 +1,35 @@
+﻿{
+  "name": "mcp-robot-wars",
+  "version": "0.1.0",
+  "description": "Robot Wars for Autonomous AI Agents via Model Context Protocol (MCP)",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/server/app.ts",
+    "demo": "tsx src/demo.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaggeman/mcp-robot-wars.git"
+  },
+  "keywords": ["mcp", "ai-agents", "robot-wars", "model-context-protocol", "gaming"],
+  "author": "jaggeman",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1",
+    "ws": "^8.21.3",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.0",
+    "@types/ws": "^8.5.14",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
+}
